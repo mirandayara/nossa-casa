@@ -4,11 +4,8 @@ export default async function handler(req, res) {
   if (!url) return res.status(400).json({ error: 'URL required' });
 
   const prompt = `Com base nesta URL de produto de e-commerce brasileiro, identifique o produto e retorne suas especificações técnicas.
-
 URL: ${url}
-
-Use seu conhecimento sobre produtos para preencher os campos. Retorne SOMENTE um objeto JSON válido, sem markdown, sem explicação.
-
+Retorne SOMENTE um objeto JSON válido, sem markdown, sem explicação.
 {
   "nome": "nome completo do produto",
   "preco": null,
@@ -42,9 +39,18 @@ Use seu conhecimento sobre produtos para preencher os campos. Retorne SOMENTE um
     });
 
     const data = await response.json();
+    
+    // Se a API retornou erro, manda o erro completo
+    if (data.error) {
+      return res.status(500).json({ error: data.error.message, type: data.error.type, raw: data });
+    }
+
     const text = (data.content || []).filter(b => b.type === 'text').map(b => b.text).join('').trim();
+    if (!text) return res.status(422).json({ error: 'Empty response', raw: data });
+
     const match = text.replace(/```json|```/g, '').trim().match(/\{[\s\S]*\}/);
-    if (!match) return res.status(422).json({ error: 'Could not parse' });
+    if (!match) return res.status(422).json({ error: 'Could not parse', text });
+
     return res.status(200).json(JSON.parse(match[0]));
   } catch (e) {
     return res.status(500).json({ error: e.message });
