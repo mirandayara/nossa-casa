@@ -47,7 +47,7 @@ const calcParcelas = (precoParcelado, nParcelas, juros = 0.0099) => {
 
 const newItem = () => ({
   id: `item_${Date.now()}`,
-  nome: "", categoria: "Outro", status: "Pesquisando", prioridade: "Média",
+  nome: "", categoria: "Outro", status: "Pesquisando", prioridade: "Média", adicionadoPor: "Mo14",
   imagem: "", marca: "", modelo: "", cor: "", voltagem: "", potencia: "",
   dimensoes: "", capacidade: "", garantia: "", avaliacao: "",
   specs_extras: "", pros: "", contras: "", notas: "",
@@ -225,6 +225,7 @@ function ListView({ items, allItems, filterStatus, setFilterStatus, search, setS
                   </div>
                 )}
                 {item.lojas.length > 1 && <div style={{ fontSize:11, color:"#A09080", marginTop:4 }}>🔍 {item.lojas.length} lojas comparadas</div>}
+                {item.adicionadoPor && <div style={{ fontSize:11, color:"#8B6F47", marginTop:4 }}>👤 {item.adicionadoPor}</div>}
               </div>
             );
           })}
@@ -367,11 +368,13 @@ function DetailView({ item, setItem, editMode, setEditMode, onSave, onDelete, on
                 {editMode||isNew ? (
                   <><select style={S.sel} value={item.categoria} onChange={e => upd("categoria", e.target.value)}>{Object.keys(CAT_ICONS).map(c => <option key={c}>{c}</option>)}</select>
                   <select style={S.sel} value={item.status} onChange={e => upd("status", e.target.value)}>{["Pesquisando","Decidido","Comprado"].map(s => <option key={s}>{s}</option>)}</select>
-                  <select style={S.sel} value={item.prioridade} onChange={e => upd("prioridade", e.target.value)}>{["Alta","Média","Baixa"].map(p => <option key={p}>{p}</option>)}</select></>
+                  <select style={S.sel} value={item.prioridade} onChange={e => upd("prioridade", e.target.value)}>{["Alta","Média","Baixa"].map(p => <option key={p}>{p}</option>)}</select>
+                  <select style={S.sel} value={item.adicionadoPor||"Mo14"} onChange={e => upd("adicionadoPor", e.target.value)}>{["Mo14","Mo21"].map(p => <option key={p}>{p}</option>)}</select></>
                 ) : (
                   <><span style={S.tagN}>{item.categoria}</span>
                   <span style={{ ...S.badge, background:STATUS_COLORS[item.status].bg, color:STATUS_COLORS[item.status].text }}><span style={{ ...S.dot, background:STATUS_COLORS[item.status].dot }} />{item.status}</span>
-                  <span style={{ ...S.tagN, background: item.prioridade==="Alta"?"#FDECEA":item.prioridade==="Baixa"?"#E8F5E9":"#FFF8E1" }}>{item.prioridade==="Alta"?"🔴":item.prioridade==="Baixa"?"🟢":"🟡"} {item.prioridade}</span></>
+                  <span style={{ ...S.tagN, background: item.prioridade==="Alta"?"#FDECEA":item.prioridade==="Baixa"?"#E8F5E9":"#FFF8E1" }}>{item.prioridade==="Alta"?"🔴":item.prioridade==="Baixa"?"🟢":"🟡"} {item.prioridade}</span>
+                  {item.adicionadoPor && <span style={{ ...S.tagN, background:"#EDE8E0" }}>👤 {item.adicionadoPor}</span>}</>
                 )}
               </div>
             </div>
