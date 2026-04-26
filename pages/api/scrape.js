@@ -3,50 +3,27 @@ export default async function handler(req, res) {
   const { url } = req.body;
   if (!url) return res.status(400).json({ error: 'URL required' });
 
-  let html = '';
-  try {
-    const response = await fetch(url, {
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-        'Accept-Language': 'pt-BR,pt;q=0.9',
-      }
-    });
-    html = await response.text();
-    html = html.replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
-               .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '')
-               .replace(/<[^>]+>/g, ' ')
-               .replace(/\s+/g, ' ')
-               .trim()
-               .slice(0, 15000);
-  } catch (e) {
-    html = 'Não foi possível acessar a página.';
-  }
-
-  const prompt = `Analise o conteúdo desta página de produto de e-commerce e extraia as informações.
+  const prompt = `Com base nesta URL de produto de e-commerce brasileiro, identifique o produto e retorne suas especificações técnicas.
 
 URL: ${url}
 
-CONTEÚDO DA PÁGINA:
-${html}
+Use seu conhecimento sobre produtos para preencher os campos. Retorne SOMENTE um objeto JSON válido, sem markdown, sem explicação.
 
-Retorne SOMENTE um objeto JSON válido, sem markdown, sem explicação.
-Formato (use null para campos não encontrados):
 {
   "nome": "nome completo do produto",
-  "preco": "preço como número string ex: 2719.32",
-  "loja": "nome da loja",
+  "preco": null,
+  "loja": "nome da loja extraído da URL",
   "categoria": "uma de: Cozinha, Lavanderia, Climatização, Limpeza, Eletrônicos, Outro",
   "marca": "marca",
   "modelo": "modelo/código",
-  "cor": "cor",
-  "voltagem": "voltagem ex: Bivolt",
-  "potencia": "potência em watts",
-  "dimensoes": "AxLxP em cm",
-  "capacidade": "ex: 377L",
-  "garantia": "garantia",
-  "avaliacao": "nota ex: 4.8",
-  "specs_extras": "outras specs, máx 150 chars"
+  "cor": "cor se identificável",
+  "voltagem": "voltagem típica do produto",
+  "potencia": "potência em watts se aplicável",
+  "dimensoes": "dimensões típicas se conhecidas",
+  "capacidade": "capacidade se aplicável",
+  "garantia": "garantia padrão do fabricante",
+  "avaliacao": null,
+  "specs_extras": "principais características, máx 150 chars"
 }`;
 
   try {
