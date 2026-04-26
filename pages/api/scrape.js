@@ -1,30 +1,52 @@
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).end();
-
   const { url } = req.body;
   if (!url) return res.status(400).json({ error: 'URL required' });
 
-  const prompt = `Pesquise informações sobre o produto neste link: ${url}
+  let html = '';
+  try {
+    const response = await fetch(url, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+        'Accept-Language': 'pt-BR,pt;q=0.9',
+      }
+    });
+    html = await response.text();
+    html = html.replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
+               .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '')
+               .replace(/<[^>]+>/g, ' ')
+               .replace(/\s+/g, ' ')
+               .trim()
+               .slice(0, 15000);
+  } catch (e) {
+    html = 'Não foi possível acessar a página.';
+  }
 
-Use a ferramenta de busca para encontrar os dados deste produto específico.
+  const prompt = `Analise o conteúdo desta página de produto de e-commerce e extraia as informações.
+
+URL: ${url}
+
+CONTEÚDO DA PÁGINA:
+${html}
+
 Retorne SOMENTE um objeto JSON válido, sem markdown, sem explicação.
-
-Formato exato (use null para campos não encontrados):
+Formato (use null para campos não encontrados):
 {
   "nome": "nome completo do produto",
-  "preco": "preço como número string, ex: 1299.90",
+  "preco": "preço como número string ex: 2719.32",
   "loja": "nome da loja",
   "categoria": "uma de: Cozinha, Lavanderia, Climatização, Limpeza, Eletrônicos, Outro",
-  "marca": "marca do produto",
-  "modelo": "modelo ou código",
-  "cor": "cor se disponível",
-  "voltagem": "voltagem (ex: 220V, Bivolt)",
+  "marca": "marca",
+  "modelo": "modelo/código",
+  "cor": "cor",
+  "voltagem": "voltagem ex: Bivolt",
   "potencia": "potência em watts",
-  "dimensoes": "dimensões em cm",
-  "capacidade": "capacidade (ex: 10kg, 400L)",
-  "garantia": "prazo de garantia",
-  "avaliacao": "nota média (ex: 4.5)",
-  "specs_extras": "outras specs relevantes, máx 150 chars"
+  "dimensoes": "AxLxP em cm",
+  "capacidade": "ex: 377L",
+  "garantia": "garantia",
+  "avaliacao": "nota ex: 4.8",
+  "specs_extras": "outras specs, máx 150 chars"
 }`;
 
   try {
@@ -38,7 +60,6 @@ Formato exato (use null para campos não encontrados):
       body: JSON.stringify({
         model: 'claude-sonnet-4-20250514',
         max_tokens: 1000,
-        tools: [{ type: 'web_search_20250305', name: 'web_search' }],
         messages: [{ role: 'user', content: prompt }],
       }),
     });
@@ -46,8 +67,7 @@ Formato exato (use null para campos não encontrados):
     const data = await response.json();
     const text = (data.content || []).filter(b => b.type === 'text').map(b => b.text).join('').trim();
     const match = text.replace(/```json|```/g, '').trim().match(/\{[\s\S]*\}/);
-    if (!match) return res.status(422).json({ error: 'Could not parse product data' });
-
+    if (!match) return res.status(422).json({ error: 'Could not parse' });
     return res.status(200).json(JSON.parse(match[0]));
   } catch (e) {
     return res.status(500).json({ error: e.message });
