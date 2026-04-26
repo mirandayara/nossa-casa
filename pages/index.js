@@ -68,13 +68,16 @@ export default function App() {
     const chosen = item.lojas.find((l) => l.escolhida);
     if (chosen) return chosen;
     return item.lojas.reduce((b, l) => {
-      const v = parsePreco(l.preco);
-      return !b || (v > 0 && v < parsePreco(b?.preco)) ? l : b;
+      const v = parsePreco(l.preco_avista || l.preco);
+      return !b || (v > 0 && v < parsePreco(b?.preco_avista || b?.preco)) ? l : b;
     }, null);
   }
 
-  const totalInvestido = items.filter((i) => i.status === "Comprado").reduce((a, i) => a + parsePreco(melhorLoja(i)?.preco), 0);
-  const totalRestante = items.filter((i) => i.status !== "Comprado").reduce((a, i) => a + parsePreco(melhorLoja(i)?.preco), 0);
+  const totalInvestido = items.filter((i) => i.status === "Comprado")
+    .reduce((a, i) => { const l = melhorLoja(i); return a + parsePreco(l?.preco_avista || l?.preco); }, 0);
+  const totalRestante = items.filter((i) => i.status !== "Comprado")
+    .reduce((a, i) => { const l = melhorLoja(i); return a + parsePreco(l?.preco_avista || l?.preco); }, 0);
+
   const filtered = items.filter((i) => {
     if (filterStatus !== "Todos" && i.status !== filterStatus) return false;
     if (search && !i.nome.toLowerCase().includes(search.toLowerCase())) return false;
@@ -102,10 +105,10 @@ export default function App() {
   };
 
   if (loading) return (
-    <div style={{ display:"flex", alignItems:"center", justifyContent:"center", minHeight:"100vh", background:"#F5F0E8", fontFamily:"sans-serif" }}>
+    <div style={{ display:"flex", alignItems:"center", justifyContent:"center", minHeight:"100vh", background:"#F5F0E8" }}>
       <div style={{ textAlign:"center" }}>
         <div style={{ fontSize:48, marginBottom:12 }}>🏡</div>
-        <div style={{ fontSize:20, color:"#8B6F47" }}>Carregando Nossa Casa…</div>
+        <div style={{ fontFamily:"'Cormorant Garamond',serif", fontSize:20, color:"#8B6F47" }}>Carregando Nossa Casa…</div>
       </div>
     </div>
   );
@@ -184,6 +187,7 @@ function ListView({ items, allItems, filterStatus, setFilterStatus, search, setS
           {items.map(item => {
             const loja = melhorLoja(item);
             const c = STATUS_COLORS[item.status];
+            const preco = parsePreco(loja?.preco_avista || loja?.preco);
             return (
               <div key={item.id} className="chover" style={S.card} onClick={() => onOpen(item.id)}>
                 <div style={{ display:"flex", justifyContent:"space-between", marginBottom:8 }}>
@@ -193,7 +197,13 @@ function ListView({ items, allItems, filterStatus, setFilterStatus, search, setS
                 <div style={S.cardName}>{item.nome||"Sem nome"}</div>
                 {item.marca && <div style={S.cardMeta}>{item.marca}{item.modelo ? ` · ${item.modelo}` : ""}</div>}
                 {item.voltagem && <div style={S.cardMeta}>⚡ {item.voltagem}</div>}
-                {loja?.preco && <div style={S.cardPreco}>{fmt(parsePreco(loja.preco))}{loja.nome && <span style={{ fontSize:11, color:"#A09080", marginLeft:5 }}>· {loja.nome}</span>}</div>}
+                {preco > 0 && (
+                  <div style={S.cardPreco}>
+                    {fmt(preco)}
+                    {loja?.nome && <span style={{ fontSize:11, color:"#A09080", marginLeft:5 }}>· {loja.nome}</span>}
+                  </div>
+                )}
+                {loja?.parcelas && <div style={{ fontSize:11, color:"#8B6F47", marginTop:2 }}>{loja.parcelas}</div>}
                 {item.lojas.length > 1 && <div style={{ fontSize:11, color:"#A09080", marginTop:4 }}>🔍 {item.lojas.length} lojas comparadas</div>}
               </div>
             );
@@ -211,7 +221,7 @@ function DetailView({ item, setItem, editMode, setEditMode, onSave, onDelete, on
 
   const upd = (f, v) => setItem(p => ({ ...p, [f]: v }));
   const updLoja = (idx, f, v) => setItem(p => ({ ...p, lojas: p.lojas.map((l,i) => i===idx ? { ...l, [f]:v } : l) }));
-  const addLoja = (data={}) => setItem(p => ({ ...p, lojas: [...p.lojas, { nome:"", preco:"", url:"", escolhida:false, ...data }] }));
+  const addLoja = (data={}) => setItem(p => ({ ...p, lojas: [...p.lojas, { nome:"", preco_avista:"", preco_parcelado:"", parcelas:"", url:"", escolhida:false, ...data }] }));
   const removeLoja = (idx) => setItem(p => ({ ...p, lojas: p.lojas.filter((_,i) => i!==idx) }));
   const escolher = (idx) => setItem(p => ({ ...p, lojas: p.lojas.map((l,i) => ({ ...l, escolhida: i===idx })) }));
 
@@ -232,7 +242,13 @@ function DetailView({ item, setItem, editMode, setEditMode, onSave, onDelete, on
         potencia: data.potencia||p.potencia, dimensoes: data.dimensoes||p.dimensoes,
         capacidade: data.capacidade||p.capacidade, garantia: data.garantia||p.garantia,
         avaliacao: data.avaliacao||p.avaliacao, specs_extras: data.specs_extras||p.specs_extras,
-        lojas: [...p.lojas, { nome: data.loja||"Loja", preco: data.preco||"", url, escolhida:false }],
+        lojas: [...p.lojas, {
+          nome: data.loja||"Loja",
+          preco_avista: data.preco_avista||"",
+          preco_parcelado: data.preco_parcelado||"",
+          parcelas: data.parcelas||"",
+          url, escolhida:false
+        }],
       }));
       setScrapeMsg({ text:"✅ Dados importados! Confira e ajuste se necessário.", type:"success" });
       setUrlInput("");
@@ -240,7 +256,7 @@ function DetailView({ item, setItem, editMode, setEditMode, onSave, onDelete, on
     finally { setScraping(false); }
   };
 
-  const precos = item.lojas.map(l => parsePreco(l.preco)).filter(v => v > 0);
+  const precos = item.lojas.map(l => parsePreco(l.preco_avista || l.preco)).filter(v => v > 0);
   const minP = precos.length ? Math.min(...precos) : 0;
   const maxP = precos.length ? Math.max(...precos) : 0;
   const msgBg = { success:"#D4EDDA", error:"#F8D7DA", info:"#FFF3CD" };
@@ -313,24 +329,49 @@ function DetailView({ item, setItem, editMode, setEditMode, onSave, onDelete, on
             {maxP-minP > 0 && !editMode && !isNew && <div style={{ fontSize:12, background:"#D4EDDA", color:"#155724", borderRadius:8, padding:"4px 10px", fontWeight:600 }}>💡 Economia de até {fmt(maxP-minP)}</div>}
           </div>
           {item.lojas.length===0 && !editMode && !isNew && <div style={{ color:"#A09080", fontSize:13 }}>Nenhuma loja. Edite e use "Importar por link".</div>}
-          <div style={{ display:"flex", flexDirection:"column", gap:8 }}>
+          <div style={{ display:"flex", flexDirection:"column", gap:10 }}>
             {item.lojas.map((loja,idx) => {
-              const p = parsePreco(loja.preco);
-              const isBest = p > 0 && p === minP && precos.length > 1;
+              const pAvista = parsePreco(loja.preco_avista || loja.preco);
+              const pParc = parsePreco(loja.preco_parcelado);
+              const isBest = pAvista > 0 && pAvista === minP && precos.length > 1;
               return (
                 <div key={idx} style={{ ...S.lojaRow, ...(loja.escolhida?S.lojaChosen:{}), ...(isBest?{ borderColor:"#28A745" }:{}) }}>
                   {editMode||isNew ? (
-                    <><input style={{ ...S.input, flex:1, minWidth:100 }} placeholder="Loja" value={loja.nome} onChange={e => updLoja(idx,"nome",e.target.value)} />
-                    <input style={{ ...S.input, width:120 }} placeholder="Preço" value={loja.preco} onChange={e => updLoja(idx,"preco",e.target.value)} />
-                    <input style={{ ...S.input, flex:2 }} placeholder="URL" value={loja.url} onChange={e => updLoja(idx,"url",e.target.value)} />
-                    <button style={S.iconBtn} onClick={() => escolher(idx)}>{loja.escolhida?"✅":"⭕"}</button>
-                    <button style={{ ...S.iconBtn, color:"#DC3545" }} onClick={() => removeLoja(idx)}>✕</button></>
+                    <div style={{ display:"flex", flexDirection:"column", gap:6, width:"100%" }}>
+                      <div style={{ display:"flex", gap:8, flexWrap:"wrap" }}>
+                        <input style={{ ...S.input, flex:1, minWidth:100 }} placeholder="Loja" value={loja.nome} onChange={e => updLoja(idx,"nome",e.target.value)} />
+                        <input style={{ ...S.input, width:130 }} placeholder="Preço à vista (ex: 2719.32)" value={loja.preco_avista||""} onChange={e => updLoja(idx,"preco_avista",e.target.value)} />
+                        <input style={{ ...S.input, width:130 }} placeholder="Preço parcelado" value={loja.preco_parcelado||""} onChange={e => updLoja(idx,"preco_parcelado",e.target.value)} />
+                      </div>
+                      <div style={{ display:"flex", gap:8, flexWrap:"wrap" }}>
+                        <input style={{ ...S.input, flex:1 }} placeholder="Parcelas (ex: 10x de R$ 299,90)" value={loja.parcelas||""} onChange={e => updLoja(idx,"parcelas",e.target.value)} />
+                        <input style={{ ...S.input, flex:2 }} placeholder="URL do produto" value={loja.url||""} onChange={e => updLoja(idx,"url",e.target.value)} />
+                        <button style={S.iconBtn} onClick={() => escolher(idx)}>{loja.escolhida?"✅":"⭕"}</button>
+                        <button style={{ ...S.iconBtn, color:"#DC3545" }} onClick={() => removeLoja(idx)}>✕</button>
+                      </div>
+                    </div>
                   ) : (
-                    <><span style={{ fontWeight:600, minWidth:110, color:"#2C1810", fontSize:14 }}>{loja.nome||"Loja"}</span>
-                    <span style={{ fontFamily:"'Cormorant Garamond'", fontSize:20, fontWeight:700, color:isBest?"#155724":"#2C1810" }}>{p?fmt(p):"—"}</span>
-                    {loja.url && <a href={loja.url} target="_blank" rel="noreferrer" style={{ fontSize:12, padding:"3px 10px", background:"#EDE8E0", borderRadius:6, textDecoration:"none", color:"#5C4A32", fontWeight:500 }} onClick={e => e.stopPropagation()}>🔗 Ver</a>}
-                    {loja.escolhida && <span style={S.chosenTag}>✅ Escolhida</span>}
-                    {isBest && !loja.escolhida && <span style={{ ...S.chosenTag, background:"#D4EDDA", color:"#155724" }}>🏆 Melhor preço</span>}</>
+                    <div style={{ display:"flex", flexDirection:"column", gap:4, width:"100%" }}>
+                      <div style={{ display:"flex", alignItems:"center", gap:10, flexWrap:"wrap" }}>
+                        <span style={{ fontWeight:600, minWidth:100, color:"#2C1810", fontSize:14 }}>{loja.nome||"Loja"}</span>
+                        {pAvista > 0 && (
+                          <div style={{ display:"flex", flexDirection:"column" }}>
+                            <span style={{ fontSize:11, color:"#8B6F47", fontWeight:500 }}>À VISTA / PIX</span>
+                            <span style={{ fontFamily:"'Cormorant Garamond'", fontSize:20, fontWeight:700, color:isBest?"#155724":"#2C1810" }}>{fmt(pAvista)}</span>
+                          </div>
+                        )}
+                        {pParc > 0 && pParc !== pAvista && (
+                          <div style={{ display:"flex", flexDirection:"column" }}>
+                            <span style={{ fontSize:11, color:"#8B6F47", fontWeight:500 }}>PARCELADO</span>
+                            <span style={{ fontFamily:"'Cormorant Garamond'", fontSize:18, fontWeight:600, color:"#5C4A32" }}>{fmt(pParc)}</span>
+                          </div>
+                        )}
+                        {loja.url && <a href={loja.url} target="_blank" rel="noreferrer" style={{ fontSize:12, padding:"3px 10px", background:"#EDE8E0", borderRadius:6, textDecoration:"none", color:"#5C4A32", fontWeight:500 }} onClick={e => e.stopPropagation()}>🔗 Ver</a>}
+                        {loja.escolhida && <span style={S.chosenTag}>✅ Escolhida</span>}
+                        {isBest && !loja.escolhida && <span style={{ ...S.chosenTag, background:"#D4EDDA", color:"#155724" }}>🏆 Melhor preço</span>}
+                      </div>
+                      {loja.parcelas && <div style={{ fontSize:12, color:"#8B6F47", marginLeft:110 }}>{loja.parcelas}</div>}
+                    </div>
                   )}
                 </div>
               );
@@ -401,7 +442,7 @@ const S = {
   specsGrid:{ display:"grid", gridTemplateColumns:"repeat(auto-fill, minmax(155px, 1fr))", gap:12 },
   specItem:{ display:"flex", flexDirection:"column", gap:4 },
   specLabel:{ fontSize:11, color:"#A09080", fontWeight:600, textTransform:"uppercase", letterSpacing:"0.4px" },
-  lojaRow:{ display:"flex", gap:8, alignItems:"center", flexWrap:"wrap", padding:"10px 12px", borderRadius:10, border:"1.5px solid #EDE8E0", background:"#FAFAF7" },
+  lojaRow:{ padding:"12px 14px", borderRadius:10, border:"1.5px solid #EDE8E0", background:"#FAFAF7" },
   lojaChosen:{ borderColor:"#8B6F47", background:"#FDF8F0" },
   iconBtn:{ background:"none", border:"none", cursor:"pointer", fontSize:18, padding:"2px 4px" },
   btnDashed:{ border:"1.5px dashed #DDD5C8", background:"none", borderRadius:8, padding:"9px", cursor:"pointer", color:"#8B6F47", fontSize:13, fontFamily:"'DM Sans'", width:"100%", marginTop:8 },
