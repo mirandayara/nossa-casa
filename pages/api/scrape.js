@@ -13,12 +13,16 @@ export default async function handler(req, res) {
       }
     });
     html = await response.text();
+    // Extract og:image before stripping tags
+    const ogImage = html.match(/<meta[^>]+property=["']og:image["'][^>]+content=["']([^"']+)["']/i)?.[1] ||
+                    html.match(/<meta[^>]+content=["']([^"']+)["'][^>]+property=["']og:image["']/i)?.[1] || '';
     html = html.replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
                .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '')
                .replace(/<[^>]+>/g, ' ')
                .replace(/\s+/g, ' ')
                .trim()
                .slice(0, 15000);
+    html = `OG_IMAGE: ${ogImage}\n\n` + html;
   } catch (e) {
     html = '';
   }
@@ -31,9 +35,9 @@ ${html ? `\nCONTEÚDO DA PÁGINA:\n${html}` : ''}
 Retorne SOMENTE um objeto JSON válido, sem markdown, sem explicação.
 {
   "nome": "nome completo do produto",
-  "preco_avista": "preço à vista/pix como número string ex: 2719.32",
-  "preco_parcelado": "preço parcelado como número string ex: 2999.00",
-  "parcelas": "descrição do parcelamento ex: 10x de R$ 299,90",
+  "imagem": "URL completa da imagem principal do produto (use OG_IMAGE se disponível)",
+  "preco_pix": "preço à vista/pix como número string ex: 2801.55",
+  "preco_parcelado": "preço parcelado total como número string ex: 2949.00",
   "loja": "nome da loja",
   "categoria": "uma de: Cozinha, Lavanderia, Climatização, Limpeza, Eletrônicos, Outro",
   "marca": "marca",
