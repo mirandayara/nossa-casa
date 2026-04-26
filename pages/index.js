@@ -36,15 +36,11 @@ const parsePreco = (s) => {
   return parseFloat(str) || 0;
 };
 
-// Calculadora de parcelas
 const calcParcelas = (precoParcelado, nParcelas, juros = 0.0099) => {
   if (!precoParcelado || nParcelas <= 0) return null;
   const p = parsePreco(precoParcelado);
   if (p <= 0) return null;
-  if (nParcelas <= 10) {
-    return { valor: p / nParcelas, total: p, comJuros: false };
-  }
-  // Com juros de 0,99% ao mês
+  if (nParcelas <= 10) return { valor: p / nParcelas, total: p, comJuros: false };
   const parcela = p * (juros * Math.pow(1 + juros, nParcelas)) / (Math.pow(1 + juros, nParcelas) - 1);
   return { valor: parcela, total: parcela * nParcelas, comJuros: true };
 };
@@ -52,7 +48,7 @@ const calcParcelas = (precoParcelado, nParcelas, juros = 0.0099) => {
 const newItem = () => ({
   id: `item_${Date.now()}`,
   nome: "", categoria: "Outro", status: "Pesquisando", prioridade: "Média",
-  marca: "", modelo: "", cor: "", voltagem: "", potencia: "",
+  imagem: "", marca: "", modelo: "", cor: "", voltagem: "", potencia: "",
   dimensoes: "", capacidade: "", garantia: "", avaliacao: "",
   specs_extras: "", pros: "", contras: "", notas: "",
   lojas: [],
@@ -85,15 +81,15 @@ export default function App() {
     const chosen = item.lojas.find((l) => l.escolhida);
     if (chosen) return chosen;
     return item.lojas.reduce((b, l) => {
-      const v = parsePreco(l.preco_pix || l.preco_avista);
-      return !b || (v > 0 && v < parsePreco(b?.preco_pix || b?.preco_avista)) ? l : b;
+      const v = parsePreco(l.preco_pix);
+      return !b || (v > 0 && v < parsePreco(b?.preco_pix)) ? l : b;
     }, null);
   }
 
   const totalInvestido = items.filter((i) => i.status === "Comprado")
-    .reduce((a, i) => { const l = melhorLoja(i); return a + parsePreco(l?.preco_pix || l?.preco_avista); }, 0);
+    .reduce((a, i) => { const l = melhorLoja(i); return a + parsePreco(l?.preco_pix); }, 0);
   const totalRestante = items.filter((i) => i.status !== "Comprado")
-    .reduce((a, i) => { const l = melhorLoja(i); return a + parsePreco(l?.preco_pix || l?.preco_avista); }, 0);
+    .reduce((a, i) => { const l = melhorLoja(i); return a + parsePreco(l?.preco_pix); }, 0);
 
   const filtered = items.filter((i) => {
     if (filterStatus !== "Todos" && i.status !== filterStatus) return false;
@@ -204,14 +200,22 @@ function ListView({ items, allItems, filterStatus, setFilterStatus, search, setS
           {items.map(item => {
             const loja = melhorLoja(item);
             const c = STATUS_COLORS[item.status];
-            const preco = parsePreco(loja?.preco_pix || loja?.preco_avista);
+            const preco = parsePreco(loja?.preco_pix);
             return (
               <div key={item.id} className="chover" style={S.card} onClick={() => onOpen(item.id)}>
-                <div style={{ display:"flex", justifyContent:"space-between", marginBottom:8 }}>
-                  <span style={{ fontSize:30 }}>{CAT_ICONS[item.categoria]||"📦"}</span>
-                  <span style={{ ...S.badge, background:c.bg, color:c.text }}><span style={{ ...S.dot, background:c.dot }} />{item.status}</span>
+                {item.imagem ? (
+                  <div style={{ width:"100%", height:140, borderRadius:8, overflow:"hidden", marginBottom:10, background:"#F5F0E8" }}>
+                    <img src={item.imagem} alt={item.nome} style={{ width:"100%", height:"100%", objectFit:"contain" }} onError={e => e.target.style.display="none"} />
+                  </div>
+                ) : (
+                  <div style={{ width:"100%", height:100, borderRadius:8, marginBottom:10, background:"#F5F0E8", display:"flex", alignItems:"center", justifyContent:"center", fontSize:40 }}>
+                    {CAT_ICONS[item.categoria]||"📦"}
+                  </div>
+                )}
+                <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", marginBottom:6 }}>
+                  <div style={S.cardName}>{item.nome||"Sem nome"}</div>
+                  <span style={{ ...S.badge, background:c.bg, color:c.text, flexShrink:0, marginLeft:6 }}><span style={{ ...S.dot, background:c.dot }} />{item.status}</span>
                 </div>
-                <div style={S.cardName}>{item.nome||"Sem nome"}</div>
                 {item.marca && <div style={S.cardMeta}>{item.marca}{item.modelo ? ` · ${item.modelo}` : ""}</div>}
                 {item.voltagem && <div style={S.cardMeta}>⚡ {item.voltagem}</div>}
                 {preco > 0 && (
@@ -230,7 +234,6 @@ function ListView({ items, allItems, filterStatus, setFilterStatus, search, setS
   );
 }
 
-// Componente calculadora de parcelas
 function CalculadoraParcelas({ precoPix, precoParcelado }) {
   const [parcelas, setParcelas] = useState(10);
   const p = parsePreco(precoParcelado) || parsePreco(precoPix);
@@ -246,36 +249,25 @@ function CalculadoraParcelas({ precoPix, precoParcelado }) {
         <span style={{ fontSize:13, color:"#5C4A32" }}>Parcelar em:</span>
         <div style={{ display:"flex", gap:6, flexWrap:"wrap" }}>
           {[1,2,3,4,5,6,7,8,9,10,11,12].map(n => (
-            <button key={n} onClick={() => setParcelas(n)}
-              style={{ ...S.parcelaBtn, ...(parcelas===n ? S.parcelaBtnOn : {}) }}>
-              {n}x
-            </button>
+            <button key={n} onClick={() => setParcelas(n)} style={{ ...S.parcelaBtn, ...(parcelas===n ? S.parcelaBtnOn : {}) }}>{n}x</button>
           ))}
         </div>
       </div>
-      <div style={{ display:"flex", gap:16, flexWrap:"wrap", alignItems:"flex-start" }}>
-        <div style={{ background:"#fff", borderRadius:8, padding:"10px 14px", flex:1, minWidth:140 }}>
+      <div style={{ display:"flex", gap:12, flexWrap:"wrap" }}>
+        <div style={{ background:"#fff", borderRadius:8, padding:"10px 14px", flex:1, minWidth:130 }}>
           <div style={{ fontSize:11, color:"#8B6F47", fontWeight:600, marginBottom:4 }}>VALOR DA PARCELA</div>
-          <div style={{ fontFamily:"'Cormorant Garamond'", fontSize:22, fontWeight:700, color: calc.comJuros ? "#C0392B" : "#155724" }}>
-            {fmt(calc.valor)}
-          </div>
-          <div style={{ fontSize:11, color: calc.comJuros ? "#C0392B" : "#155724", marginTop:2 }}>
-            {calc.comJuros ? "⚠️ com juros (0,99%/mês)" : "✅ sem juros"}
-          </div>
+          <div style={{ fontFamily:"'Cormorant Garamond'", fontSize:22, fontWeight:700, color: calc.comJuros ? "#C0392B" : "#155724" }}>{fmt(calc.valor)}</div>
+          <div style={{ fontSize:11, color: calc.comJuros ? "#C0392B" : "#155724", marginTop:2 }}>{calc.comJuros ? "⚠️ com juros (0,99%/mês)" : "✅ sem juros"}</div>
         </div>
-        <div style={{ background:"#fff", borderRadius:8, padding:"10px 14px", flex:1, minWidth:140 }}>
+        <div style={{ background:"#fff", borderRadius:8, padding:"10px 14px", flex:1, minWidth:130 }}>
           <div style={{ fontSize:11, color:"#8B6F47", fontWeight:600, marginBottom:4 }}>TOTAL A PAGAR</div>
-          <div style={{ fontFamily:"'Cormorant Garamond'", fontSize:22, fontWeight:700, color:"#2C1810" }}>
-            {fmt(calc.total)}
-          </div>
+          <div style={{ fontFamily:"'Cormorant Garamond'", fontSize:22, fontWeight:700, color:"#2C1810" }}>{fmt(calc.total)}</div>
           {calc.comJuros && <div style={{ fontSize:11, color:"#C0392B", marginTop:2 }}>+{fmt(calc.total - p)} de juros</div>}
         </div>
         {economiaVista > 0 && (
-          <div style={{ background:"#D4EDDA", borderRadius:8, padding:"10px 14px", flex:1, minWidth:140 }}>
-            <div style={{ fontSize:11, color:"#155724", fontWeight:600, marginBottom:4 }}>ECONOMIA À VISTA (PIX)</div>
-            <div style={{ fontFamily:"'Cormorant Garamond'", fontSize:22, fontWeight:700, color:"#155724" }}>
-              {fmt(economiaVista)}
-            </div>
+          <div style={{ background:"#D4EDDA", borderRadius:8, padding:"10px 14px", flex:1, minWidth:130 }}>
+            <div style={{ fontSize:11, color:"#155724", fontWeight:600, marginBottom:4 }}>ECONOMIA À VISTA</div>
+            <div style={{ fontFamily:"'Cormorant Garamond'", fontSize:22, fontWeight:700, color:"#155724" }}>{fmt(economiaVista)}</div>
             <div style={{ fontSize:11, color:"#155724", marginTop:2 }}>pagando {fmt(parsePreco(precoPix))} no Pix</div>
           </div>
         )}
@@ -303,29 +295,25 @@ function DetailView({ item, setItem, editMode, setEditMode, onSave, onDelete, on
     try {
       const res = await fetch("/api/scrape", { method:"POST", headers:{ "Content-Type":"application/json" }, body: JSON.stringify({ url }) });
       const data = await res.json();
-      if (!res.ok || data.error) { setScrapeMsg({ text:"❌ Não consegui extrair os dados. Tente preencher manualmente.", type:"error" }); return; }
+      if (!res.ok || data.error) { setScrapeMsg({ text:"❌ Não consegui extrair os dados.", type:"error" }); return; }
       setItem(p => ({
         ...p,
         nome: data.nome||p.nome, categoria: data.categoria||p.categoria,
+        imagem: data.imagem||p.imagem,
         marca: data.marca||p.marca, modelo: data.modelo||p.modelo,
         cor: data.cor||p.cor, voltagem: data.voltagem||p.voltagem,
         potencia: data.potencia||p.potencia, dimensoes: data.dimensoes||p.dimensoes,
         capacidade: data.capacidade||p.capacidade, garantia: data.garantia||p.garantia,
         avaliacao: data.avaliacao||p.avaliacao, specs_extras: data.specs_extras||p.specs_extras,
-        lojas: [...p.lojas, {
-          nome: data.loja||"Loja",
-          preco_pix: data.preco_pix||data.preco_avista||"",
-          preco_parcelado: data.preco_parcelado||data.preco_avista||"",
-          url, escolhida:false
-        }],
+        lojas: [...p.lojas, { nome: data.loja||"Loja", preco_pix: data.preco_pix||"", preco_parcelado: data.preco_parcelado||"", url, escolhida:false }],
       }));
-      setScrapeMsg({ text:"✅ Dados importados! Confira e ajuste os preços se necessário.", type:"success" });
+      setScrapeMsg({ text:"✅ Dados importados! Confira os preços.", type:"success" });
       setUrlInput("");
     } catch { setScrapeMsg({ text:"❌ Erro inesperado.", type:"error" }); }
     finally { setScraping(false); }
   };
 
-  const precos = item.lojas.map(l => parsePreco(l.preco_pix || l.preco_avista)).filter(v => v > 0);
+  const precos = item.lojas.map(l => parsePreco(l.preco_pix)).filter(v => v > 0);
   const minP = precos.length ? Math.min(...precos) : 0;
   const maxP = precos.length ? Math.max(...precos) : 0;
   const msgBg = { success:"#D4EDDA", error:"#F8D7DA", info:"#FFF3CD" };
@@ -345,7 +333,7 @@ function DetailView({ item, setItem, editMode, setEditMode, onSave, onDelete, on
         {(editMode||isNew) && (
           <div style={{ ...S.dCard, borderLeft:"4px solid #8B6F47", background:"#FDF8F0" }}>
             <div style={S.secTitle}>🔗 Importar por link</div>
-            <div style={{ fontSize:13, color:"#7A5C35", marginBottom:10, lineHeight:1.6 }}>Cole o link do produto e preenchemos tudo automaticamente. Os preços Pix/parcelado podem precisar de ajuste manual.</div>
+            <div style={{ fontSize:13, color:"#7A5C35", marginBottom:10, lineHeight:1.6 }}>Cole o link do produto e preenchemos tudo automaticamente, incluindo a imagem!</div>
             <div style={{ display:"flex", gap:8 }}>
               <input style={{ ...S.input, flex:1 }} placeholder="https://www.magazineluiza.com.br/..." value={urlInput} onChange={e => setUrlInput(e.target.value)} onKeyDown={e => e.key==="Enter" && !scraping && handleScrape()} disabled={scraping} />
               <button style={{ ...S.btnPrimary, minWidth:110 }} onClick={handleScrape} disabled={scraping||!urlInput.trim()}>{scraping?"⏳ Buscando…":"Importar"}</button>
@@ -354,11 +342,27 @@ function DetailView({ item, setItem, editMode, setEditMode, onSave, onDelete, on
           </div>
         )}
 
+        {/* IMAGEM + NOME */}
         <div style={S.dCard}>
           <div style={{ display:"flex", gap:16, alignItems:"flex-start", flexWrap:"wrap" }}>
-            <div style={{ fontSize:52 }}>{CAT_ICONS[item.categoria]||"📦"}</div>
+            {item.imagem ? (
+              <div style={{ width:120, height:120, borderRadius:10, overflow:"hidden", background:"#F5F0E8", flexShrink:0 }}>
+                <img src={item.imagem} alt={item.nome} style={{ width:"100%", height:"100%", objectFit:"contain" }} onError={e => e.target.parentElement.innerHTML = `<div style="display:flex;align-items:center;justify-content:center;height:100%;font-size:40px">${CAT_ICONS[item.categoria]||"📦"}</div>`} />
+              </div>
+            ) : (
+              <div style={{ width:80, height:80, borderRadius:10, background:"#F5F0E8", display:"flex", alignItems:"center", justifyContent:"center", fontSize:40, flexShrink:0 }}>
+                {CAT_ICONS[item.categoria]||"📦"}
+              </div>
+            )}
             <div style={{ flex:1, minWidth:200 }}>
-              {editMode||isNew ? <input style={{ ...S.input, fontSize:20, fontFamily:"'Cormorant Garamond'", fontWeight:700 }} placeholder="Nome do produto" value={item.nome} onChange={e => upd("nome", e.target.value)} /> : <div style={{ fontFamily:"'Cormorant Garamond'", fontSize:26, fontWeight:700, color:"#2C1810" }}>{item.nome}</div>}
+              {editMode||isNew ? (
+                <>
+                  <input style={{ ...S.input, fontSize:18, fontFamily:"'Cormorant Garamond'", fontWeight:700, marginBottom:8 }} placeholder="Nome do produto" value={item.nome} onChange={e => upd("nome", e.target.value)} />
+                  <input style={{ ...S.input, fontSize:13 }} placeholder="URL da imagem (opcional)" value={item.imagem||""} onChange={e => upd("imagem", e.target.value)} />
+                </>
+              ) : (
+                <div style={{ fontFamily:"'Cormorant Garamond'", fontSize:24, fontWeight:700, color:"#2C1810" }}>{item.nome}</div>
+              )}
               <div style={{ display:"flex", gap:8, marginTop:8, flexWrap:"wrap" }}>
                 {editMode||isNew ? (
                   <><select style={S.sel} value={item.categoria} onChange={e => upd("categoria", e.target.value)}>{Object.keys(CAT_ICONS).map(c => <option key={c}>{c}</option>)}</select>
@@ -398,7 +402,7 @@ function DetailView({ item, setItem, editMode, setEditMode, onSave, onDelete, on
             {maxP-minP > 0 && !editMode && !isNew && <div style={{ fontSize:12, background:"#D4EDDA", color:"#155724", borderRadius:8, padding:"4px 10px", fontWeight:600 }}>💡 Economia de até {fmt(maxP-minP)}</div>}
           </div>
           {item.lojas.length===0 && !editMode && !isNew && <div style={{ color:"#A09080", fontSize:13 }}>Nenhuma loja. Edite e use "Importar por link".</div>}
-          <div style={{ display:"flex", flexDirection:"column", gap:10 }}>
+          <div style={{ display:"flex", flexDirection:"column", gap:12 }}>
             {item.lojas.map((loja,idx) => {
               const pPix = parsePreco(loja.preco_pix);
               const pParc = parsePreco(loja.preco_parcelado);
@@ -429,7 +433,7 @@ function DetailView({ item, setItem, editMode, setEditMode, onSave, onDelete, on
                     </div>
                   ) : (
                     <div style={{ display:"flex", flexDirection:"column", gap:8, width:"100%" }}>
-                      <div style={{ display:"flex", alignItems:"center", gap:12, flexWrap:"wrap" }}>
+                      <div style={{ display:"flex", alignItems:"center", gap:10, flexWrap:"wrap" }}>
                         <span style={{ fontWeight:700, color:"#2C1810", fontSize:15 }}>{loja.nome||"Loja"}</span>
                         {loja.escolhida && <span style={S.chosenTag}>✅ Escolhida</span>}
                         {isBest && !loja.escolhida && <span style={{ ...S.chosenTag, background:"#D4EDDA", color:"#155724" }}>🏆 Melhor preço</span>}
@@ -439,7 +443,7 @@ function DetailView({ item, setItem, editMode, setEditMode, onSave, onDelete, on
                         {pPix > 0 && (
                           <div>
                             <div style={{ fontSize:11, color:"#8B6F47", fontWeight:600 }}>PIX / À VISTA</div>
-                            <div style={{ fontFamily:"'Cormorant Garamond'", fontSize:22, fontWeight:700, color: isBest?"#155724":"#2C1810" }}>{fmt(pPix)}</div>
+                            <div style={{ fontFamily:"'Cormorant Garamond'", fontSize:22, fontWeight:700, color:isBest?"#155724":"#2C1810" }}>{fmt(pPix)}</div>
                           </div>
                         )}
                         {pParc > 0 && (
@@ -509,9 +513,9 @@ const S = {
   fBtnOn:{ background:"#2C1810", color:"#F5E6C8" },
   summRow:{ display:"flex", gap:10, marginBottom:20, flexWrap:"wrap" },
   summCard:{ borderRadius:12, padding:"12px 18px", display:"flex", alignItems:"center", gap:10, flex:"1 1 100px" },
-  grid:{ display:"grid", gridTemplateColumns:"repeat(auto-fill, minmax(210px, 1fr))", gap:14 },
+  grid:{ display:"grid", gridTemplateColumns:"repeat(auto-fill, minmax(220px, 1fr))", gap:14 },
   card:{ background:"#fff", borderRadius:14, padding:16, boxShadow:"0 2px 8px rgba(0,0,0,.06)", border:"1px solid #EDE8E0" },
-  cardName:{ fontFamily:"'Cormorant Garamond'", fontWeight:700, fontSize:16, color:"#2C1810", marginBottom:3 },
+  cardName:{ fontFamily:"'Cormorant Garamond'", fontWeight:700, fontSize:15, color:"#2C1810", lineHeight:1.3 },
   cardMeta:{ fontSize:12, color:"#A09080", marginTop:2 },
   cardPreco:{ fontFamily:"'Cormorant Garamond'", fontWeight:700, fontSize:18, color:"#5C4A32", marginTop:6 },
   badge:{ display:"inline-flex", alignItems:"center", gap:5, borderRadius:20, padding:"3px 9px", fontSize:11, fontWeight:500 },
