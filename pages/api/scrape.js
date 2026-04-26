@@ -32,7 +32,7 @@ Retorne SOMENTE um objeto JSON válido, sem markdown, sem explicação.
         'anthropic-version': '2023-06-01',
       },
       body: JSON.stringify({
-        model: 'claude-3-haiku-20240307',
+        model: 'claude-opus-4-7',
         max_tokens: 1000,
         messages: [{ role: 'user', content: prompt }],
       }),
