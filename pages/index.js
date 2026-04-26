@@ -29,8 +29,25 @@ const fmt = (v) =>
   isNaN(v) || v === 0 ? "—" :
   new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(v);
 
-const parsePreco = (s) =>
-  parseFloat((s || "").replace(/[R$\s]/g, "").replace(/\./g, "").replace(",", ".")) || 0;
+const parsePreco = (s) => {
+  if (!s) return 0;
+  const str = String(s).replace(/[R$\s]/g, "").trim();
+  if (str.includes(",")) return parseFloat(str.replace(/\./g, "").replace(",", ".")) || 0;
+  return parseFloat(str) || 0;
+};
+
+// Calculadora de parcelas
+const calcParcelas = (precoParcelado, nParcelas, juros = 0.0099) => {
+  if (!precoParcelado || nParcelas <= 0) return null;
+  const p = parsePreco(precoParcelado);
+  if (p <= 0) return null;
+  if (nParcelas <= 10) {
+    return { valor: p / nParcelas, total: p, comJuros: false };
+  }
+  // Com juros de 0,99% ao mês
+  const parcela = p * (juros * Math.pow(1 + juros, nParcelas)) / (Math.pow(1 + juros, nParcelas) - 1);
+  return { valor: parcela, total: parcela * nParcelas, comJuros: true };
+};
 
 const newItem = () => ({
   id: `item_${Date.now()}`,
@@ -68,15 +85,15 @@ export default function App() {
     const chosen = item.lojas.find((l) => l.escolhida);
     if (chosen) return chosen;
     return item.lojas.reduce((b, l) => {
-      const v = parsePreco(l.preco_avista || l.preco);
-      return !b || (v > 0 && v < parsePreco(b?.preco_avista || b?.preco)) ? l : b;
+      const v = parsePreco(l.preco_pix || l.preco_avista);
+      return !b || (v > 0 && v < parsePreco(b?.preco_pix || b?.preco_avista)) ? l : b;
     }, null);
   }
 
   const totalInvestido = items.filter((i) => i.status === "Comprado")
-    .reduce((a, i) => { const l = melhorLoja(i); return a + parsePreco(l?.preco_avista || l?.preco); }, 0);
+    .reduce((a, i) => { const l = melhorLoja(i); return a + parsePreco(l?.preco_pix || l?.preco_avista); }, 0);
   const totalRestante = items.filter((i) => i.status !== "Comprado")
-    .reduce((a, i) => { const l = melhorLoja(i); return a + parsePreco(l?.preco_avista || l?.preco); }, 0);
+    .reduce((a, i) => { const l = melhorLoja(i); return a + parsePreco(l?.preco_pix || l?.preco_avista); }, 0);
 
   const filtered = items.filter((i) => {
     if (filterStatus !== "Todos" && i.status !== filterStatus) return false;
@@ -187,7 +204,7 @@ function ListView({ items, allItems, filterStatus, setFilterStatus, search, setS
           {items.map(item => {
             const loja = melhorLoja(item);
             const c = STATUS_COLORS[item.status];
-            const preco = parsePreco(loja?.preco_avista || loja?.preco);
+            const preco = parsePreco(loja?.preco_pix || loja?.preco_avista);
             return (
               <div key={item.id} className="chover" style={S.card} onClick={() => onOpen(item.id)}>
                 <div style={{ display:"flex", justifyContent:"space-between", marginBottom:8 }}>
@@ -203,7 +220,6 @@ function ListView({ items, allItems, filterStatus, setFilterStatus, search, setS
                     {loja?.nome && <span style={{ fontSize:11, color:"#A09080", marginLeft:5 }}>· {loja.nome}</span>}
                   </div>
                 )}
-                {loja?.parcelas && <div style={{ fontSize:11, color:"#8B6F47", marginTop:2 }}>{loja.parcelas}</div>}
                 {item.lojas.length > 1 && <div style={{ fontSize:11, color:"#A09080", marginTop:4 }}>🔍 {item.lojas.length} lojas comparadas</div>}
               </div>
             );
@@ -214,6 +230,60 @@ function ListView({ items, allItems, filterStatus, setFilterStatus, search, setS
   );
 }
 
+// Componente calculadora de parcelas
+function CalculadoraParcelas({ precoPix, precoParcelado }) {
+  const [parcelas, setParcelas] = useState(10);
+  const p = parsePreco(precoParcelado) || parsePreco(precoPix);
+  if (!p) return null;
+  const calc = calcParcelas(String(p), parcelas);
+  if (!calc) return null;
+  const economiaVista = precoPix ? p - parsePreco(precoPix) : 0;
+
+  return (
+    <div style={{ marginTop:14, background:"#F5F0E8", borderRadius:10, padding:"14px 16px" }}>
+      <div style={{ fontSize:12, fontWeight:600, color:"#8B6F47", marginBottom:10, textTransform:"uppercase", letterSpacing:"0.5px" }}>🧮 Calculadora de Parcelas</div>
+      <div style={{ display:"flex", alignItems:"center", gap:10, flexWrap:"wrap", marginBottom:12 }}>
+        <span style={{ fontSize:13, color:"#5C4A32" }}>Parcelar em:</span>
+        <div style={{ display:"flex", gap:6, flexWrap:"wrap" }}>
+          {[1,2,3,4,5,6,7,8,9,10,11,12].map(n => (
+            <button key={n} onClick={() => setParcelas(n)}
+              style={{ ...S.parcelaBtn, ...(parcelas===n ? S.parcelaBtnOn : {}) }}>
+              {n}x
+            </button>
+          ))}
+        </div>
+      </div>
+      <div style={{ display:"flex", gap:16, flexWrap:"wrap", alignItems:"flex-start" }}>
+        <div style={{ background:"#fff", borderRadius:8, padding:"10px 14px", flex:1, minWidth:140 }}>
+          <div style={{ fontSize:11, color:"#8B6F47", fontWeight:600, marginBottom:4 }}>VALOR DA PARCELA</div>
+          <div style={{ fontFamily:"'Cormorant Garamond'", fontSize:22, fontWeight:700, color: calc.comJuros ? "#C0392B" : "#155724" }}>
+            {fmt(calc.valor)}
+          </div>
+          <div style={{ fontSize:11, color: calc.comJuros ? "#C0392B" : "#155724", marginTop:2 }}>
+            {calc.comJuros ? "⚠️ com juros (0,99%/mês)" : "✅ sem juros"}
+          </div>
+        </div>
+        <div style={{ background:"#fff", borderRadius:8, padding:"10px 14px", flex:1, minWidth:140 }}>
+          <div style={{ fontSize:11, color:"#8B6F47", fontWeight:600, marginBottom:4 }}>TOTAL A PAGAR</div>
+          <div style={{ fontFamily:"'Cormorant Garamond'", fontSize:22, fontWeight:700, color:"#2C1810" }}>
+            {fmt(calc.total)}
+          </div>
+          {calc.comJuros && <div style={{ fontSize:11, color:"#C0392B", marginTop:2 }}>+{fmt(calc.total - p)} de juros</div>}
+        </div>
+        {economiaVista > 0 && (
+          <div style={{ background:"#D4EDDA", borderRadius:8, padding:"10px 14px", flex:1, minWidth:140 }}>
+            <div style={{ fontSize:11, color:"#155724", fontWeight:600, marginBottom:4 }}>ECONOMIA À VISTA (PIX)</div>
+            <div style={{ fontFamily:"'Cormorant Garamond'", fontSize:22, fontWeight:700, color:"#155724" }}>
+              {fmt(economiaVista)}
+            </div>
+            <div style={{ fontSize:11, color:"#155724", marginTop:2 }}>pagando {fmt(parsePreco(precoPix))} no Pix</div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function DetailView({ item, setItem, editMode, setEditMode, onSave, onDelete, onBack, isNew, melhorLoja, saving }) {
   const [urlInput, setUrlInput] = useState("");
   const [scraping, setScraping] = useState(false);
@@ -221,7 +291,7 @@ function DetailView({ item, setItem, editMode, setEditMode, onSave, onDelete, on
 
   const upd = (f, v) => setItem(p => ({ ...p, [f]: v }));
   const updLoja = (idx, f, v) => setItem(p => ({ ...p, lojas: p.lojas.map((l,i) => i===idx ? { ...l, [f]:v } : l) }));
-  const addLoja = (data={}) => setItem(p => ({ ...p, lojas: [...p.lojas, { nome:"", preco_avista:"", preco_parcelado:"", parcelas:"", url:"", escolhida:false, ...data }] }));
+  const addLoja = (data={}) => setItem(p => ({ ...p, lojas: [...p.lojas, { nome:"", preco_pix:"", preco_parcelado:"", url:"", escolhida:false, ...data }] }));
   const removeLoja = (idx) => setItem(p => ({ ...p, lojas: p.lojas.filter((_,i) => i!==idx) }));
   const escolher = (idx) => setItem(p => ({ ...p, lojas: p.lojas.map((l,i) => ({ ...l, escolhida: i===idx })) }));
 
@@ -244,19 +314,18 @@ function DetailView({ item, setItem, editMode, setEditMode, onSave, onDelete, on
         avaliacao: data.avaliacao||p.avaliacao, specs_extras: data.specs_extras||p.specs_extras,
         lojas: [...p.lojas, {
           nome: data.loja||"Loja",
-          preco_avista: data.preco_avista||"",
-          preco_parcelado: data.preco_parcelado||"",
-          parcelas: data.parcelas||"",
+          preco_pix: data.preco_pix||data.preco_avista||"",
+          preco_parcelado: data.preco_parcelado||data.preco_avista||"",
           url, escolhida:false
         }],
       }));
-      setScrapeMsg({ text:"✅ Dados importados! Confira e ajuste se necessário.", type:"success" });
+      setScrapeMsg({ text:"✅ Dados importados! Confira e ajuste os preços se necessário.", type:"success" });
       setUrlInput("");
     } catch { setScrapeMsg({ text:"❌ Erro inesperado.", type:"error" }); }
     finally { setScraping(false); }
   };
 
-  const precos = item.lojas.map(l => parsePreco(l.preco_avista || l.preco)).filter(v => v > 0);
+  const precos = item.lojas.map(l => parsePreco(l.preco_pix || l.preco_avista)).filter(v => v > 0);
   const minP = precos.length ? Math.min(...precos) : 0;
   const maxP = precos.length ? Math.max(...precos) : 0;
   const msgBg = { success:"#D4EDDA", error:"#F8D7DA", info:"#FFF3CD" };
@@ -276,7 +345,7 @@ function DetailView({ item, setItem, editMode, setEditMode, onSave, onDelete, on
         {(editMode||isNew) && (
           <div style={{ ...S.dCard, borderLeft:"4px solid #8B6F47", background:"#FDF8F0" }}>
             <div style={S.secTitle}>🔗 Importar por link</div>
-            <div style={{ fontSize:13, color:"#7A5C35", marginBottom:10, lineHeight:1.6 }}>Cole o link do produto (Casas Bahia, Magazine Luiza, Amazon…) e preenchemos tudo automaticamente.</div>
+            <div style={{ fontSize:13, color:"#7A5C35", marginBottom:10, lineHeight:1.6 }}>Cole o link do produto e preenchemos tudo automaticamente. Os preços Pix/parcelado podem precisar de ajuste manual.</div>
             <div style={{ display:"flex", gap:8 }}>
               <input style={{ ...S.input, flex:1 }} placeholder="https://www.magazineluiza.com.br/..." value={urlInput} onChange={e => setUrlInput(e.target.value)} onKeyDown={e => e.key==="Enter" && !scraping && handleScrape()} disabled={scraping} />
               <button style={{ ...S.btnPrimary, minWidth:110 }} onClick={handleScrape} disabled={scraping||!urlInput.trim()}>{scraping?"⏳ Buscando…":"Importar"}</button>
@@ -331,46 +400,65 @@ function DetailView({ item, setItem, editMode, setEditMode, onSave, onDelete, on
           {item.lojas.length===0 && !editMode && !isNew && <div style={{ color:"#A09080", fontSize:13 }}>Nenhuma loja. Edite e use "Importar por link".</div>}
           <div style={{ display:"flex", flexDirection:"column", gap:10 }}>
             {item.lojas.map((loja,idx) => {
-              const pAvista = parsePreco(loja.preco_avista || loja.preco);
+              const pPix = parsePreco(loja.preco_pix);
               const pParc = parsePreco(loja.preco_parcelado);
-              const isBest = pAvista > 0 && pAvista === minP && precos.length > 1;
+              const isBest = pPix > 0 && pPix === minP && precos.length > 1;
               return (
                 <div key={idx} style={{ ...S.lojaRow, ...(loja.escolhida?S.lojaChosen:{}), ...(isBest?{ borderColor:"#28A745" }:{}) }}>
                   {editMode||isNew ? (
-                    <div style={{ display:"flex", flexDirection:"column", gap:6, width:"100%" }}>
-                      <div style={{ display:"flex", gap:8, flexWrap:"wrap" }}>
-                        <input style={{ ...S.input, flex:1, minWidth:100 }} placeholder="Loja" value={loja.nome} onChange={e => updLoja(idx,"nome",e.target.value)} />
-                        <input style={{ ...S.input, width:130 }} placeholder="Preço à vista (ex: 2719.32)" value={loja.preco_avista||""} onChange={e => updLoja(idx,"preco_avista",e.target.value)} />
-                        <input style={{ ...S.input, width:130 }} placeholder="Preço parcelado" value={loja.preco_parcelado||""} onChange={e => updLoja(idx,"preco_parcelado",e.target.value)} />
-                      </div>
-                      <div style={{ display:"flex", gap:8, flexWrap:"wrap" }}>
-                        <input style={{ ...S.input, flex:1 }} placeholder="Parcelas (ex: 10x de R$ 299,90)" value={loja.parcelas||""} onChange={e => updLoja(idx,"parcelas",e.target.value)} />
-                        <input style={{ ...S.input, flex:2 }} placeholder="URL do produto" value={loja.url||""} onChange={e => updLoja(idx,"url",e.target.value)} />
+                    <div style={{ display:"flex", flexDirection:"column", gap:8, width:"100%" }}>
+                      <div style={{ display:"flex", gap:8, flexWrap:"wrap", alignItems:"center" }}>
+                        <input style={{ ...S.input, flex:1, minWidth:100 }} placeholder="Nome da loja" value={loja.nome} onChange={e => updLoja(idx,"nome",e.target.value)} />
                         <button style={S.iconBtn} onClick={() => escolher(idx)}>{loja.escolhida?"✅":"⭕"}</button>
                         <button style={{ ...S.iconBtn, color:"#DC3545" }} onClick={() => removeLoja(idx)}>✕</button>
                       </div>
+                      <div style={{ display:"flex", gap:8, flexWrap:"wrap" }}>
+                        <div style={{ flex:1, minWidth:130 }}>
+                          <div style={S.specLabel}>Preço Pix / À vista</div>
+                          <input style={{ ...S.input, marginTop:4 }} placeholder="ex: 2801.55" value={loja.preco_pix||""} onChange={e => updLoja(idx,"preco_pix",e.target.value)} />
+                        </div>
+                        <div style={{ flex:1, minWidth:130 }}>
+                          <div style={S.specLabel}>Preço parcelado (total)</div>
+                          <input style={{ ...S.input, marginTop:4 }} placeholder="ex: 2949.00" value={loja.preco_parcelado||""} onChange={e => updLoja(idx,"preco_parcelado",e.target.value)} />
+                        </div>
+                        <div style={{ flex:2, minWidth:200 }}>
+                          <div style={S.specLabel}>URL do produto</div>
+                          <input style={{ ...S.input, marginTop:4 }} placeholder="https://..." value={loja.url||""} onChange={e => updLoja(idx,"url",e.target.value)} />
+                        </div>
+                      </div>
                     </div>
                   ) : (
-                    <div style={{ display:"flex", flexDirection:"column", gap:4, width:"100%" }}>
-                      <div style={{ display:"flex", alignItems:"center", gap:10, flexWrap:"wrap" }}>
-                        <span style={{ fontWeight:600, minWidth:100, color:"#2C1810", fontSize:14 }}>{loja.nome||"Loja"}</span>
-                        {pAvista > 0 && (
-                          <div style={{ display:"flex", flexDirection:"column" }}>
-                            <span style={{ fontSize:11, color:"#8B6F47", fontWeight:500 }}>À VISTA / PIX</span>
-                            <span style={{ fontFamily:"'Cormorant Garamond'", fontSize:20, fontWeight:700, color:isBest?"#155724":"#2C1810" }}>{fmt(pAvista)}</span>
-                          </div>
-                        )}
-                        {pParc > 0 && pParc !== pAvista && (
-                          <div style={{ display:"flex", flexDirection:"column" }}>
-                            <span style={{ fontSize:11, color:"#8B6F47", fontWeight:500 }}>PARCELADO</span>
-                            <span style={{ fontFamily:"'Cormorant Garamond'", fontSize:18, fontWeight:600, color:"#5C4A32" }}>{fmt(pParc)}</span>
-                          </div>
-                        )}
-                        {loja.url && <a href={loja.url} target="_blank" rel="noreferrer" style={{ fontSize:12, padding:"3px 10px", background:"#EDE8E0", borderRadius:6, textDecoration:"none", color:"#5C4A32", fontWeight:500 }} onClick={e => e.stopPropagation()}>🔗 Ver</a>}
+                    <div style={{ display:"flex", flexDirection:"column", gap:8, width:"100%" }}>
+                      <div style={{ display:"flex", alignItems:"center", gap:12, flexWrap:"wrap" }}>
+                        <span style={{ fontWeight:700, color:"#2C1810", fontSize:15 }}>{loja.nome||"Loja"}</span>
                         {loja.escolhida && <span style={S.chosenTag}>✅ Escolhida</span>}
                         {isBest && !loja.escolhida && <span style={{ ...S.chosenTag, background:"#D4EDDA", color:"#155724" }}>🏆 Melhor preço</span>}
+                        {loja.url && <a href={loja.url} target="_blank" rel="noreferrer" style={{ fontSize:12, padding:"3px 10px", background:"#EDE8E0", borderRadius:6, textDecoration:"none", color:"#5C4A32", fontWeight:500 }} onClick={e => e.stopPropagation()}>🔗 Ver</a>}
                       </div>
-                      {loja.parcelas && <div style={{ fontSize:12, color:"#8B6F47", marginLeft:110 }}>{loja.parcelas}</div>}
+                      <div style={{ display:"flex", gap:16, flexWrap:"wrap" }}>
+                        {pPix > 0 && (
+                          <div>
+                            <div style={{ fontSize:11, color:"#8B6F47", fontWeight:600 }}>PIX / À VISTA</div>
+                            <div style={{ fontFamily:"'Cormorant Garamond'", fontSize:22, fontWeight:700, color: isBest?"#155724":"#2C1810" }}>{fmt(pPix)}</div>
+                          </div>
+                        )}
+                        {pParc > 0 && (
+                          <div>
+                            <div style={{ fontSize:11, color:"#8B6F47", fontWeight:600 }}>PARCELADO (total)</div>
+                            <div style={{ fontFamily:"'Cormorant Garamond'", fontSize:22, fontWeight:700, color:"#5C4A32" }}>{fmt(pParc)}</div>
+                          </div>
+                        )}
+                        {pPix > 0 && pParc > 0 && pParc > pPix && (
+                          <div style={{ display:"flex", alignItems:"flex-end" }}>
+                            <div style={{ background:"#FFF3CD", borderRadius:8, padding:"4px 10px", fontSize:12, color:"#856404", fontWeight:600 }}>
+                              💸 Pix economiza {fmt(pParc - pPix)}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                      {(pPix > 0 || pParc > 0) && (
+                        <CalculadoraParcelas precoPix={loja.preco_pix} precoParcelado={loja.preco_parcelado || loja.preco_pix} />
+                      )}
                     </div>
                   )}
                 </div>
@@ -442,9 +530,11 @@ const S = {
   specsGrid:{ display:"grid", gridTemplateColumns:"repeat(auto-fill, minmax(155px, 1fr))", gap:12 },
   specItem:{ display:"flex", flexDirection:"column", gap:4 },
   specLabel:{ fontSize:11, color:"#A09080", fontWeight:600, textTransform:"uppercase", letterSpacing:"0.4px" },
-  lojaRow:{ padding:"12px 14px", borderRadius:10, border:"1.5px solid #EDE8E0", background:"#FAFAF7" },
+  lojaRow:{ padding:"14px 16px", borderRadius:10, border:"1.5px solid #EDE8E0", background:"#FAFAF7" },
   lojaChosen:{ borderColor:"#8B6F47", background:"#FDF8F0" },
   iconBtn:{ background:"none", border:"none", cursor:"pointer", fontSize:18, padding:"2px 4px" },
   btnDashed:{ border:"1.5px dashed #DDD5C8", background:"none", borderRadius:8, padding:"9px", cursor:"pointer", color:"#8B6F47", fontSize:13, fontFamily:"'DM Sans'", width:"100%", marginTop:8 },
   chosenTag:{ background:"#FDF8F0", color:"#8B6F47", borderRadius:6, padding:"3px 8px", fontSize:11, fontWeight:600 },
+  parcelaBtn:{ background:"#EDE8E0", border:"none", borderRadius:6, padding:"4px 10px", cursor:"pointer", fontSize:12, fontFamily:"'DM Sans'", fontWeight:500, color:"#6B5744" },
+  parcelaBtnOn:{ background:"#2C1810", color:"#F5E6C8" },
 };
